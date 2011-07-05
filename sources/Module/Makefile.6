@@ -58,6 +58,7 @@ endif
 
 ## Comment/uncomment the following line to enable/disable debugging
 #EXTRA_CFLAGS += -DDBG
+EXTRA_CFLAGS += -I/home/fred/tese/src/include
 
 EXTRA_CFLAGS += $(WFLAGS)
 
@@ -108,7 +109,7 @@ ND_CONF=/etc/sysconfig/network-scripts/ifcfg-rausb0
 ifdef NDDIR
 	NDDIR := $(NDDIR)
 else
- 	NDDIR := /etc/sysconfig/network-scripts
+	NDDIR := /etc/sysconfig/network-scripts
 endif
 
 ifdef MOD_CONF
@@ -122,26 +123,26 @@ all:
 
 clean:
 	rm -rf *.o *~ .*.cmd *.ko *.mod.c .tmp_versions built-in.o
-	
+
 install:
 	make -C /lib/modules/$(shell uname -r)/build \
 	INSTALL_MOD_DIR=extra SUBDIRS=$(shell pwd) \
 	modules_install 
-	
+
 	@echo "Network device directory $(NDDIR)"; 
 	@echo "Module configuration file $(MOD_CONF)";	
-	
+
 	@if [ -d "$(NDDIR)" ] ; then \
 		if [ ! -f "$(ND_CONF)" ]; then \
 			echo "Create 'ifcfg-rausb0' in $(NDDIR)/"; \
 			cp ifcfg-rausb0 $(NDDIR)/ ; \
 		fi; \
- 	fi
-	
+	fi
+
 	@if ! grep -q 'rausb0' $(MOD_CONF) ; then \
 		echo "append 'alias rausb0 rt73' to $(MOD_CONF)"; \
 		echo "alias rausb0 rt73" >> $(MOD_CONF) ; \
- 	fi
+	fi
 	/sbin/depmod -a
 
 #	auto copy *.bin to /etc/Wireless/RT73STA

@@ -42,7 +42,7 @@
 #include "rt_config.h"
 #include <net/iw_handler.h>
 
-#include "kpacket.h"
+#include "pdu.h"
 
 uint64_t rts_cts_frame_duration = 0;
 
@@ -244,6 +244,16 @@ int64_t swap_64bit_word_byte_order(int64_t time) {
 	return *((int64_t *) bytes);
 }
 
+uint8_t check_port(uint16_t port){
+	uint8_t i;
+	for(i = 0; i < port_array_count; i++)
+		if(port_array[i] == port){
+			printk(KERN_EMERG "This port is in port array.\n");
+			return 1;
+		}
+	return 0;
+}
+
 /*
  ========================================================================
 
@@ -272,16 +282,16 @@ int64_t swap_64bit_word_byte_order(int64_t time) {
 	UCHAR PsMode;
 	unsigned long IrqFlags;
 	static ULONG OldFailLowValue = 0, OldFailHighValue = 0, OldRetryLowValue =
-			0, OldRetryHighValue = 0;
+	  0, OldRetryHighValue = 0;
+	static ULONG fails = 0, retries = 0;
 
 	/*Fred's stuff*/
 	struct iphdr* iph;
 	struct udphdr* udph = NULL;
 	uint8_t store_duration = 0;
-	static uint64_t time_to_transmit_last_packet = 0;
+	static uint8_t last_packet_was_important = 0;
 	uint64_t total_time = 0;
-	packet_t *pkt = NULL;
-	UCHAR previous_failed = 0, previous_retried = 0;
+	__tp(pdu) *pkt = NULL;
 	/*
 	 * 802.11g:
 	 * SIFS = 10 us
@@ -358,7 +368,7 @@ int64_t swap_64bit_word_byte_order(int64_t time) {
 	iph = ip_hdr(pSkb);
 	if (iph->protocol == IPPROTO_UDP) {
 		udph = (struct udphdr*) (((char*) iph) + (iph->ihl << 2));
-		if (udph->dest == htons(57843)) //I don't like to make this hardcoded, but for now it'll have to do.
+		if (check_port(ntohs(udph->dest))) //I don't like to make this hardcoded, but for now it'll have to do.
 			store_duration = 1;
 	}
 
@@ -373,9 +383,6 @@ int64_t swap_64bit_word_byte_order(int64_t time) {
 		 dif1 -= 1;
 		 dif2 = 0xFFFFFFFFFFFFFFFF + (int64_t) dif2;
 		 }*/
-		printk("Change in tx fail count. Last packet suffered %d retries.\n",
-				retry_dif2);
-		previous_retried = 1;
 	}
 
 	OldRetryLowValue = pAd->WlanCounters.RetryCount.vv.LowPart;
@@ -392,53 +399,47 @@ int64_t swap_64bit_word_byte_order(int64_t time) {
 		 dif1 -= 1;
 		 dif2 = 0xFFFFFFFFFFFFFFFF + (int64_t) dif2;
 		 }*/
-		printk("Change in tx fail count. Last packet suffered %d failures.\n",
-				fail_dif2);
-		previous_failed = 0;
 	}
 
 	OldFailLowValue = pAd->WlanCounters.FailedCount.vv.LowPart;
 	OldFailHighValue = pAd->WlanCounters.FailedCount.vv.HighPart;
 
+	if(last_packet_was_important){
+	  fails = fail_dif2;
+	  retries = retry_dif2;
+	  printk(KERN_EMERG "Last packet was important [%df%dr].\n", fails, retries);
+	}
+
 	//=====================================================================================
 	/*This is how I store values in an application payload*/
 	if (store_duration) { //Store duration in packet
-		total_time = time_to_transmit_last_packet + retry_dif2
-				* (time_to_transmit_last_packet + RTMPCalcDuration(pAd,
-						RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len));
+		total_time = DIFS + RTMPCalcDuration(
+				pAd, RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len); // DIFS + Data
 
 		//First locate the place where duration value should be stored. It should be, after the ip header, plus the udp header + 16 bytes,
 		//that is, after 16 bytes of application payload.
-		pkt = (packet_t*) (((char*) iph) + (iph->ihl << 2)
+		pkt = (__tp(pdu)*) (((char*) iph) + (iph->ihl << 2)
 				+ sizeof(struct udphdr));
-		pkt->rtt = swap_64bit_word_byte_order(total_time);
+		pkt->air = swap_64bit_word_byte_order(total_time);
 
-		//Keep time to tansmit this packet. REMEMBER: This will run only once for each packet.
-		time_to_transmit_last_packet = DIFS + RTMPCalcDuration(
-				pAd, RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len); // DIFS + Data
-		printk("Time to transmit current packet %llu\n",
-				time_to_transmit_last_packet);
+		printk(KERN_EMERG "Time to transmit current packet %llu\n",
+				total_time);
 
-		if(previous_failed)
-			pkt->flags.previous_packet_transmission_failed = 1;
-
-		if(previous_retried)
-			pkt->flags.previous_packet_suffered_retries = 1;
+		pkt->fails = fails;
+		pkt->retries = retries;
+		fails = 0;
+		retries = 0;
 
 		//Don't forget to recalculte udp checksum
 		udph->check = udp_checksum(iph, udph,
-				pSkb->data + (iph->ihl << 2) + sizeof(struct udphdr));
+					   ((char*) iph) + (iph->ihl << 2) + sizeof(struct udphdr));
 		//If udp checksum is 0 then we have to make it 0xFFFF, because 0 disables udp checksum.
 		if (!udph->check)
 			udph->check = 0xFFFF;
 
-		printk("RTS + CTS + DIFS + SIFS = %llu\n", rts_cts_frame_duration);
-		printk("Total estimated time for packet %u is %llu\n",
-				ntohl(pkt->id) - 1, total_time);
-	}
-
-	previous_failed = previous_retried = 0;
-
+		last_packet_was_important = 1;
+	}else
+	  last_packet_was_important = 0;
 	//===================================================
 
 	//

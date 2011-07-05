@@ -87,6 +87,11 @@
 #include <linux/threads.h>
 #include <linux/vmalloc.h>
 
+extern unsigned int port_array[256];
+extern int port_array_count;
+module_param_array(port_array, int, &port_array_count, 0000);
+MODULE_PARM_DESC(port_array, "An array of udp ports. Packets with destination ports in this array will be synchronized.");
+
 //usb header files
 #include <linux/usb.h>
 

@@ -39,6 +39,9 @@
 
 #include "rt_config.h"
 
+unsigned int port_array[256] = {0};
+int port_array_count = 0;
+
 ULONG	RTDebugLevel = RT_DEBUG_TRACE;
 
 char *hostname = "";		   // default CMPC
