@@ -364,12 +364,14 @@ uint8_t check_port(uint16_t port){
 	// Save RTS requirement to Ndis packet reserved field
 	RTMP_SET_PACKET_RTS(pSkb, RTSRequired);
 	RTMP_SET_PACKET_TXRATE(pSkb, pAd->PortCfg.TxRate);
-
+	
 	iph = ip_hdr(pSkb);
 	if (iph->protocol == IPPROTO_UDP) {
 		udph = (struct udphdr*) (((char*) iph) + (iph->ihl << 2));
-		if (check_port(ntohs(udph->dest))) //I don't like to make this hardcoded, but for now it'll have to do.
+		//if (check_port(ntohs(udph->dest))) //I don't like to make this hardcoded, but for now it'll have to do.
+		if(udph->dest == htons(57843)){
 			store_duration = 1;
+		}
 	}
 
 	if (OldRetryLowValue != pAd->WlanCounters.RetryCount.vv.LowPart
@@ -407,7 +409,6 @@ uint8_t check_port(uint16_t port){
 	if(last_packet_was_important){
 	  fails = fail_dif2;
 	  retries = retry_dif2;
-	  printk(KERN_EMERG "Last packet was important [%df%dr].\n", fails, retries);
 	}
 
 	//=====================================================================================
@@ -416,26 +417,29 @@ uint8_t check_port(uint16_t port){
 		total_time = DIFS + RTMPCalcDuration(
 				pAd, RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len); // DIFS + Data
 
+		//printk("Size of data %d Bytes. Estimated time %llu\n", pSkb->len, total_time);
+
 		//First locate the place where duration value should be stored. It should be, after the ip header, plus the udp header + 16 bytes,
 		//that is, after 16 bytes of application payload.
 		pkt = (__tp(pdu)*) (((char*) iph) + (iph->ihl << 2)
-				+ sizeof(struct udphdr));
-		pkt->air = swap_64bit_word_byte_order(total_time);
+				+ sizeof(struct udphdr) + sizeof(control_byte));
 
-		printk(KERN_EMERG "Time to transmit current packet %llu\n",
-				total_time);
+		//printk(KERN_EMERG "Time to transmit current packet %llu\n",
+		//		total_time);
+
+		pkt->rtt = swap_64bit_word_byte_order(total_time);
 
 		pkt->fails = fails;
 		pkt->retries = retries;
 		fails = 0;
 		retries = 0;
 
-		//Don't forget to recalculte udp checksum
-		udph->check = udp_checksum(iph, udph,
-					   ((char*) iph) + (iph->ihl << 2) + sizeof(struct udphdr));
+		
+		//udph->check = udp_checksum(iph, udph,
+		//			   ((char*) iph) + (iph->ihl << 2) + sizeof(struct udphdr));
 		//If udp checksum is 0 then we have to make it 0xFFFF, because 0 disables udp checksum.
-		if (!udph->check)
-			udph->check = 0xFFFF;
+		//if (!udph->check)
+		//	udph->check = 0xFFFF;
 
 		last_packet_was_important = 1;
 	}else
