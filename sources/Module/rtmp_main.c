@@ -57,7 +57,7 @@ MODULE_PARM_DESC (hostname, "Host Name");
 // *** If you have a solution for the bug in current version of driver, please mail to me.
 // Otherwise post to forum in ralinktech's web site(www.ralinktech.com) and let all users help you. ***
 MODULE_AUTHOR("Paul Lin <paul_lin@ralinktech.com>");
-MODULE_DESCRIPTION("RT73 Wireless Lan Linux Driver");
+MODULE_DESCRIPTION("RT73 Wireless Lan Linux Driver. This version has been patched to correctly fill the essid with iwconfig.");
 
 // *** open source release
 MODULE_LICENSE("GPL");

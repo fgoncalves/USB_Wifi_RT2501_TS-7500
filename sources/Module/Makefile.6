@@ -69,7 +69,7 @@ ifeq ($(PLATFORM),CMPC)
 LINUX_SRC = $(KERNEL_SOURCE)
 endif
 
-EXTRA_CFLAGS += -I$(LINUX_SRC)/include
+EXTRA_CFLAGS += -I$(LINUX_SRC)/include -DCONFIG_SYNCH_ADHOC
 
 obj-m := rt73.o
 
@@ -89,7 +89,8 @@ rt73-objs := \
 	rtmp_wep.o \
 	rtmp_info.o \
 	rtmp_tkip.o \
-	wpa.o md5.o
+	wpa.o md5.o \
+	sync_proto.o proc_filters.o filter_chains.o
 
 ifeq ($(HAS_NATIVE_WPA_SUPPLICANT_SUPPORT),y)
 rt73-objs += rtmp_wext.o

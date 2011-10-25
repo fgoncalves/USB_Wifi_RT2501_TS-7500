@@ -510,75 +510,74 @@ int rt_ioctl_siwap(struct net_device *dev,
 					struct iw_request_info *info,
 					union iwreq_data *wrqu, char *extra)
 {
-	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER) RTMP_OS_NETDEV_GET_PRIV(dev);
-	UCHAR Bssid[MAC_ADDR_LEN];
+  PRTMP_ADAPTER pAd = (PRTMP_ADAPTER) RTMP_OS_NETDEV_GET_PRIV(dev);
+  UCHAR Bssid[MAC_ADDR_LEN];
 
-    //check if the interface is down
-	if ((dev->flags & IFF_UP) == 0)
-		return -ENETDOWN;
-    if (pAd->RTUSBCmdThr_pid < 0)
-        return -ENETDOWN;
+  //check if the interface is down
+  if ((dev->flags & IFF_UP) == 0)
+    return -ENETDOWN;
+  if (pAd->RTUSBCmdThr_pid < 0)
+    return -ENETDOWN;
 
-	if (wrqu->ap_addr.sa_family != ARPHRD_ETHER)
-		return -EINVAL;
+  if (wrqu->ap_addr.sa_family != ARPHRD_ETHER)
+    return -EINVAL;
 
 #ifdef NATIVE_WPA_SUPPLICANT_SUPPORT
 #if WIRELESS_EXT > 17
-	if (pAd->PortCfg.bNativeWpa == TRUE)  // add by johnli
-	{
-		if (pAd->PortCfg.wx_need_sync){
-			wext2Rtmp_Security_Wrapper(pAd);
-			pAd->PortCfg.wx_need_sync = 0;
-		}
-	}
+  if (pAd->PortCfg.bNativeWpa == TRUE)  // add by johnli
+    {
+      if (pAd->PortCfg.wx_need_sync){
+	wext2Rtmp_Security_Wrapper(pAd);
+	pAd->PortCfg.wx_need_sync = 0;
+      }
+    }
 #endif
 #endif
 
-	NdisMoveMemory(&Bssid[0], wrqu->ap_addr.sa_data, MAC_ADDR_LEN);
-	if (pAd->Mlme.CntlMachine.CurrState != CNTL_IDLE)
-	{
-		MlmeEnqueue(pAd, 
-					MLME_CNTL_STATE_MACHINE,
-					RT_CMD_RESET_MLME,
-					0,
-					NULL);	
-	}
+  NdisMoveMemory(&Bssid[0], wrqu->ap_addr.sa_data, MAC_ADDR_LEN);
+  if (pAd->Mlme.CntlMachine.CurrState != CNTL_IDLE)
+    {
+      MlmeEnqueue(pAd, 
+		  MLME_CNTL_STATE_MACHINE,
+		  RT_CMD_RESET_MLME,
+		  0,
+		  NULL);	
+    }
 		
 #ifdef NATIVE_WPA_SUPPLICANT_SUPPORT
-	if (pAd->PortCfg.bNativeWpa == TRUE)  // add by johnli
+  if (pAd->PortCfg.bNativeWpa == TRUE)  // add by johnli
+    {
+      if (NdisEqualMemory(wrqu->ap_addr.sa_data, "\x00\x00\x00\x00\x00\x00", MAC_ADDR_LEN))
 	{
-		if (NdisEqualMemory(wrqu->ap_addr.sa_data, "\x00\x00\x00\x00\x00\x00", MAC_ADDR_LEN))
-		{
-			if (INFRA_ON(pAd)) 
-			{
-				MLME_DISASSOC_REQ_STRUCT DisassocReq;
-					
-				pAd->MlmeAux.CurrReqIsFromNdis = TRUE;
-
-				DBGPRINT(RT_DEBUG_TRACE, "CNTL - disassociate with current AP...\n");
-				DisassocParmFill(pAd, &DisassocReq, pAd->PortCfg.Bssid, REASON_DISASSOC_STA_LEAVING);
-				MlmeEnqueue(pAd, ASSOC_STATE_MACHINE, MT2_MLME_DISASSOC_REQ, 
-							sizeof(MLME_DISASSOC_REQ_STRUCT), &DisassocReq);
-				pAd->Mlme.CntlMachine.CurrState = CNTL_WAIT_DISASSOC;
-			}
-			return 0;
-		}
+	  if (INFRA_ON(pAd)) 
+	    {
+	      MLME_DISASSOC_REQ_STRUCT DisassocReq;
+	      
+	      pAd->MlmeAux.CurrReqIsFromNdis = TRUE;
+	      
+	      DBGPRINT(RT_DEBUG_TRACE, "CNTL - disassociate with current AP...\n");
+	      DisassocParmFill(pAd, &DisassocReq, pAd->PortCfg.Bssid, REASON_DISASSOC_STA_LEAVING);
+	      MlmeEnqueue(pAd, ASSOC_STATE_MACHINE, MT2_MLME_DISASSOC_REQ, 
+			  sizeof(MLME_DISASSOC_REQ_STRUCT), &DisassocReq);
+	      pAd->Mlme.CntlMachine.CurrState = CNTL_WAIT_DISASSOC;
+	    }
+	  return 0;
 	}
+    }
 #endif // NATIVE_WPA_SUPPLICANT_SUPPORT //
-
-	MlmeEnqueue(pAd, 
-				MLME_CNTL_STATE_MACHINE, 
-				OID_802_11_BSSID, 
-				sizeof(NDIS_802_11_MAC_ADDRESS),
-				(VOID *)&Bssid);
-	DBGPRINT(RT_DEBUG_TRACE, "%s():IOCTL::SIOCSIWAP %02x:%02x:%02x:%02x:%02x:%02x\n",
-			__FUNCTION__, Bssid[0], Bssid[1], Bssid[2], Bssid[3], Bssid[4], Bssid[5]);
-
-	// Trigge rhr MlmeHandler because upper layer sent a MLME-related operations.
-	RTUSBMlmeUp(pAd);
-
-	return 0;
-	
+  
+  MlmeEnqueue(pAd, 
+	      MLME_CNTL_STATE_MACHINE, 
+	      OID_802_11_BSSID, 
+	      sizeof(NDIS_802_11_MAC_ADDRESS),
+	      (VOID *)&Bssid);
+  DBGPRINT(RT_DEBUG_TRACE, "%s():IOCTL::SIOCSIWAP %02x:%02x:%02x:%02x:%02x:%02x\n",
+	   __FUNCTION__, Bssid[0], Bssid[1], Bssid[2], Bssid[3], Bssid[4], Bssid[5]);
+  
+  // Trigge rhr MlmeHandler because upper layer sent a MLME-related operations.
+  RTUSBMlmeUp(pAd);
+  
+  return 0;	
 }
 
 
@@ -1131,48 +1130,50 @@ int rt_ioctl_siwessid(struct net_device *dev,
 			 struct iw_point *data, char *essid)
 {
 
-	PRTMP_ADAPTER pAdapter = (PRTMP_ADAPTER) RTMP_OS_NETDEV_GET_PRIV(dev);
-	NDIS_802_11_SSID					Ssid, *pSsid=NULL;
+  PRTMP_ADAPTER pAdapter = (PRTMP_ADAPTER) RTMP_OS_NETDEV_GET_PRIV(dev);
+  NDIS_802_11_SSID					Ssid, *pSsid=NULL;
+  
+  //check if the interface is down
+  if ((dev->flags & IFF_UP) == 0)
+    return -ENETDOWN;
+  if (pAdapter->RTUSBCmdThr_pid < 0)
+    return -ENETDOWN;
 
-    //check if the interface is down
-	if ((dev->flags & IFF_UP) == 0)
-		 return -ENETDOWN;
-    if (pAdapter->RTUSBCmdThr_pid < 0)
-        return -ENETDOWN;
+  NdisZeroMemory(&Ssid, sizeof(NDIS_802_11_SSID));
 
-    NdisZeroMemory(&Ssid, sizeof(NDIS_802_11_SSID));
-
-	if (data->flags)
+  if (data->flags)
+    {
+      if (data->length > IW_ESSID_MAX_SIZE)
 	{
-		if (data->length > IW_ESSID_MAX_SIZE)
-		{
-			return -E2BIG;
-		}
-#if WIRELESS_EXT < 21
-		NdisMoveMemory(Ssid.Ssid, essid, (data->length - 1));
-		Ssid.SsidLength = data->length - 1;	//minus null character.
-#else
-		NdisMoveMemory(Ssid.Ssid, essid, data->length);
-		Ssid.SsidLength = data->length;
-#endif
+	  return -E2BIG;
 	}
-	else
-	{
-		Ssid.SsidLength = 0;  // ANY ssid 
-        NdisMoveMemory(Ssid.Ssid, "", 0);
+#if WIRELESS_EXT < 21
+      NdisMoveMemory(Ssid.Ssid, essid, (data->length - 1));
+      Ssid.SsidLength = data->length - 1;	//minus null character.
+#else
+      NdisMoveMemory(Ssid.Ssid, essid, data->length);
+      Ssid.SsidLength = data->length;
+#endif
+      printk("%s:%d: SETTING ESSID because data->flags are not 0.\n", __FILE__, __LINE__);
+    }
+  else
+    {
+      Ssid.SsidLength = 0;  // ANY ssid 
+      NdisMoveMemory(Ssid.Ssid, "", 0);
+      printk("%s:%d: SETTING ESSID to any because data->flags are 0.\n", __FILE__, __LINE__);
     }
 
 #ifdef NATIVE_WPA_SUPPLICANT_SUPPORT
-	if (pAdapter->PortCfg.bNativeWpa == TRUE)  // add by johnli
-	{
-		{
-			NDIS_802_11_REMOVE_KEY removeKey;
-			memset(&removeKey, 0, sizeof(removeKey));
-			removeKey.KeyIndex = 0xffffffff;
-			//printk("Enqueue remove all AsicShareKey Table cmd first!\n");
-			RTUSBEnqueueCmdFromNdis(pAdapter, OID_802_11_REMOVE_KEY, TRUE, (PVOID)&removeKey, sizeof(removeKey));
-		}
-
+  if (pAdapter->PortCfg.bNativeWpa == TRUE)  // add by johnli
+    {
+      {
+	NDIS_802_11_REMOVE_KEY removeKey;
+	memset(&removeKey, 0, sizeof(removeKey));
+	removeKey.KeyIndex = 0xffffffff;
+	//printk("Enqueue remove all AsicShareKey Table cmd first!\n");
+	RTUSBEnqueueCmdFromNdis(pAdapter, OID_802_11_REMOVE_KEY, TRUE, (PVOID)&removeKey, sizeof(removeKey));
+      }
+      
 #if WIRELESS_EXT > 17
 		if (pAdapter->PortCfg.wx_need_sync)
 		{
@@ -1265,25 +1266,43 @@ int rt_ioctl_giwessid(struct net_device *dev,
     if (pAdapter->RTUSBCmdThr_pid < 0)
         return -ENETDOWN;
 
-	if (OPSTATUS_TEST_FLAG(pAdapter, fOP_STATUS_MEDIA_STATE_CONNECTED))
-	{
-		DBGPRINT(RT_DEBUG_TRACE,"MediaState is connected\n");
-		data->length = pAdapter->PortCfg.SsidLen;
-		memcpy(extra, pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
-		data->flags = 1;		/* active */
-		pAdapter->PortCfg.Ssid[pAdapter->PortCfg.SsidLen] = '\0';
-		DBGPRINT(RT_DEBUG_TRACE,"pAdapter->PortCfg.Ssid=%s , Ssidlen = %d\n",pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
-	}
-	else
-	{//the ANY ssid was specified
-		data->length  = 0;
-		data->flags = 0;
-		DBGPRINT(RT_DEBUG_TRACE,"MediaState is not connected, ess\n");
-	}
-	DBGPRINT(RT_DEBUG_TRACE, "===>rt_ioctl_giwessid:: (Len=%d, ssid=%s...)\n", pAdapter->PortCfg.SsidLen, pAdapter->PortCfg.Ssid);
-
-	return 0;
-
+    if (pAdapter->PortCfg.SsidLen != 0) /*1*/
+      {
+	DBGPRINT(RT_DEBUG_TRACE,"MediaState is connected\n");
+	data->length = pAdapter->PortCfg.SsidLen;
+	memcpy(extra, pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
+	memcpy(data->pointer, pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen); /*2*/
+	data->flags = 1;	       
+	pAdapter->PortCfg.Ssid[pAdapter->PortCfg.SsidLen] = '\0';
+	DBGPRINT(RT_DEBUG_TRACE,"pAdapter->PortCfg.Ssid=%s , Ssidlen = %d\n",pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
+      }
+    else
+      {//the ANY ssid was specified
+	data->length  = 0;
+	data->flags = 0;
+	DBGPRINT(RT_DEBUG_TRACE,"MediaState is not connected, ess\n");
+      }
+    /*==================This code is bugged in ARM======================
+      I've switched to the above.
+     */
+    /*if (OPSTATUS_TEST_FLAG(pAdapter, fOP_STATUS_MEDIA_STATE_CONNECTED))
+      {
+	DBGPRINT(RT_DEBUG_TRACE,"MediaState is connected\n");
+	data->length = pAdapter->PortCfg.SsidLen;
+	memcpy(extra, pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
+	data->flags = 1;	       
+	pAdapter->PortCfg.Ssid[pAdapter->PortCfg.SsidLen] = '\0';
+	DBGPRINT(RT_DEBUG_TRACE,"pAdapter->PortCfg.Ssid=%s , Ssidlen = %d\n",pAdapter->PortCfg.Ssid, pAdapter->PortCfg.SsidLen);
+      }
+    else
+      {//the ANY ssid was specified
+	data->length  = 0;
+	data->flags = 0;
+	DBGPRINT(RT_DEBUG_TRACE,"MediaState is not connected, ess\n");
+      }*/
+    DBGPRINT(RT_DEBUG_TRACE, "===>rt_ioctl_giwessid:: (Len=%d, ssid=%s...)\n", pAdapter->PortCfg.SsidLen, pAdapter->PortCfg.Ssid);
+    
+    return 0;
 }
 
 int rt_ioctl_siwnickn(struct net_device *dev,
@@ -3657,6 +3676,8 @@ INT rt73_ioctl(
 	if (pAd->RTUSBCmdThr_pid < 0)
 		return -ENETDOWN;
 
+	printk("DOING IOCTL with value %d\n", cmd);
+
 	switch(cmd)
 	{			
 		case SIOCGIFHWADDR:     //get  MAC addresses
@@ -3675,6 +3696,7 @@ INT rt73_ioctl(
 			memset(&Ssid, 0x00, sizeof(NDIS_802_11_SSID));
 			if (erq->flags)
 			{
+			  printk("SETTING SSID\n");
 				if (erq->length > IW_ESSID_MAX_SIZE)
 				{
 					Status = -E2BIG;
@@ -3686,6 +3708,7 @@ INT rt73_ioctl(
 			}
 			else
 			{	
+			  printk("SETTING ANY SSID\n");
 				Ssid.SsidLength = 0;  // ANY ssid 
 				memset(Ssid.Ssid, 0, NDIS_802_11_LENGTH_SSID);	    
 			}
@@ -3723,12 +3746,14 @@ INT rt73_ioctl(
 
 			 if (OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_MEDIA_STATE_CONNECTED))
 			{
+			  printk("GETTING SSID\n");
 				erq->flags=1;
 				erq->length = pAd->PortCfg.SsidLen;
 				Status = copy_to_user(erq->pointer, pAd->PortCfg.Ssid, erq->length);
 			}
 			else
 			{//the ANY ssid was specified
+			  printk("GETTING SSID\n");
 				erq->flags=0;
 				erq->length=0;
 			}

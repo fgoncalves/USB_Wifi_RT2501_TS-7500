@@ -90,6 +90,9 @@ VOID REPORT_ETHERNET_FRAME_TO_LLC( IN PRTMP_ADAPTER pAd, IN PUCHAR p8023hdr,
 		memcpy(skb_put(pSkb, DataSize), pData, DataSize);
 		pSkb->protocol = eth_type_trans(pSkb, net_dev);
 
+		if(printk_ratelimit())
+		  printk("%s:%d: RECEIVED PACKET.\n", __FILE__, __LINE__);
+
 		netif_rx(pSkb);
 
 		pAd->net_dev->last_rx = jiffies;
@@ -254,6 +257,22 @@ uint8_t check_port(uint16_t port){
 	return 0;
 }
 
+//micros
+#define __DELTA__ 645
+/*
+Return an estimation of the usb communication delay plus some other errors.....
+
+parameters:
+
+	packet_size : Packet's size in units of bytes
+
+Return value is in microseconds.
+*/
+uint64_t usbCalcDuration(uint32_t packet_size){
+	return packet_size * 16 / 12 + __DELTA__;
+}
+
+
 /*
  ========================================================================
 
@@ -290,7 +309,7 @@ uint8_t check_port(uint16_t port){
 	struct udphdr* udph = NULL;
 	uint8_t store_duration = 0;
 	static uint8_t last_packet_was_important = 0;
-	uint64_t total_time = 0;
+	uint64_t total_time = 0, usb = 0;
 	__tp(pdu) *pkt = NULL;
 	/*
 	 * 802.11g:
@@ -417,8 +436,10 @@ uint8_t check_port(uint16_t port){
 		total_time = DIFS + RTMPCalcDuration(
 				pAd, RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len); // DIFS + Data
 
-		//printk("Size of data %d Bytes. Estimated time %llu\n", pSkb->len, total_time);
+		usb = usbCalcDuration(pSkb->len); //Usb delay
 
+		//printk("Estimated time for usb is %llu micros\n", usb);
+		total_time += usb;
 		//First locate the place where duration value should be stored. It should be, after the ip header, plus the udp header + 16 bytes,
 		//that is, after 16 bytes of application payload.
 		pkt = (__tp(pdu)*) (((char*) iph) + (iph->ihl << 2)

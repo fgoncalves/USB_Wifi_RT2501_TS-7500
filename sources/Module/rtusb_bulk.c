@@ -38,7 +38,7 @@
 */
 
 #include	"rt_config.h"
-
+#include "sync_proto.h"
 
 void RTusb_fill_bulk_urb (struct urb *pUrb,
 	struct usb_device *pUsb_Dev,
@@ -568,98 +568,101 @@ VOID	RTUSBBulkOutDataPacket(
 	IN	UCHAR			BulkOutPipeId,
 	IN	UCHAR			Index)
 {
-	PTX_CONTEXT	pTxContext;
-	PURB		pUrb;
-	int 		ret = 0;
-	unsigned long	IrqFlags;
-	
-	NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-	if (pAd->BulkOutPending[BulkOutPipeId] == TRUE)
-	{
-		NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-		return;
-	}
-	pAd->BulkOutPending[BulkOutPipeId] = TRUE;
-	NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+  PTX_CONTEXT	pTxContext;
+  PURB		pUrb;
+  int 		ret = 0;
+  unsigned long	IrqFlags;
 
-	pTxContext = &(pAd->TxContext[BulkOutPipeId][Index]);
+  NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+  if (pAd->BulkOutPending[BulkOutPipeId] == TRUE)
+    {
+      NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+      return;
+    }
+  pAd->BulkOutPending[BulkOutPipeId] = TRUE;
+  NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
 
-	// Increase Total transmit byte counter
-	pAd->RalinkCounters.TransmittedByteCount +=  pTxContext->BulkOutSize;
+  pTxContext = &(pAd->TxContext[BulkOutPipeId][Index]);
+
+  // Increase Total transmit byte counter
+  pAd->RalinkCounters.TransmittedByteCount +=  pTxContext->BulkOutSize;
 
 
-	// Clear Data flag
-	RTUSB_CLEAR_BULK_FLAG(pAd, (fRTUSB_BULK_OUT_DATA_FRAG << BulkOutPipeId));
-	RTUSB_CLEAR_BULK_FLAG(pAd, (fRTUSB_BULK_OUT_DATA_NORMAL << BulkOutPipeId));
+  // Clear Data flag
+  RTUSB_CLEAR_BULK_FLAG(pAd, (fRTUSB_BULK_OUT_DATA_FRAG << BulkOutPipeId));
+  RTUSB_CLEAR_BULK_FLAG(pAd, (fRTUSB_BULK_OUT_DATA_NORMAL << BulkOutPipeId));
 
-	if (pTxContext->bWaitingBulkOut	!= TRUE)
-	{
-		DBGPRINT(RT_DEBUG_ERROR, "RTUSBBulkOutDataPacket failed, pTxContext->bWaitingBulkOut != TRUE, Index %d, NextBulkOutIndex %d\n", 
-			Index, pAd->NextBulkOutIndex[BulkOutPipeId]);
-		NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-		pAd->BulkOutPending[BulkOutPipeId] = FALSE;
-		NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-		return;
-	}
-	else if (pTxContext->BulkOutSize == 0)
-	{
-		//
-		// This may happen on CCX Leap Ckip or Cmic
-		// When the Key was been set not on time.
-		// We will break it when the Key was Zero on RTUSBHardTransmit
-		// And this will cause deadlock that the TxContext always InUse.
-		//
-		NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+  if (pTxContext->bWaitingBulkOut	!= TRUE)
+    {
+      DBGPRINT(RT_DEBUG_ERROR, "RTUSBBulkOutDataPacket failed, pTxContext->bWaitingBulkOut != TRUE, Index %d, NextBulkOutIndex %d\n", 
+	       Index, pAd->NextBulkOutIndex[BulkOutPipeId]);
+      NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+      pAd->BulkOutPending[BulkOutPipeId] = FALSE;
+      NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+      return;
+    }
+  else if (pTxContext->BulkOutSize == 0)
+    {
+      //
+      // This may happen on CCX Leap Ckip or Cmic
+      // When the Key was been set not on time.
+      // We will break it when the Key was Zero on RTUSBHardTransmit
+      // And this will cause deadlock that the TxContext always InUse.
+      //
+      NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
 		
-		pTxContext->InUse	   = FALSE;
-		pTxContext->LastOne    = FALSE;
-		pTxContext->IRPPending = FALSE;
-		pTxContext->bWaitingBulkOut = FALSE;
-		pTxContext->BulkOutSize= 0;
-		pAd->NextBulkOutIndex[BulkOutPipeId] = (pAd->NextBulkOutIndex[BulkOutPipeId] + 1) % TX_RING_SIZE;
-		pAd->BulkOutPending[BulkOutPipeId] = FALSE;
-		NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+      pTxContext->InUse	   = FALSE;
+      pTxContext->LastOne    = FALSE;
+      pTxContext->IRPPending = FALSE;
+      pTxContext->bWaitingBulkOut = FALSE;
+      pTxContext->BulkOutSize= 0;
+      pAd->NextBulkOutIndex[BulkOutPipeId] = (pAd->NextBulkOutIndex[BulkOutPipeId] + 1) % TX_RING_SIZE;
+      pAd->BulkOutPending[BulkOutPipeId] = FALSE;
+      NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
 
-		return;		
-	}
-	else if (!OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_MEDIA_STATE_CONNECTED))
+      return;		
+    }
+  else if (!OPSTATUS_TEST_FLAG(pAd, fOP_STATUS_MEDIA_STATE_CONNECTED))
+    {
+      //
+      // Since there is no connection, so we need to empty the Tx Bulk out Ring.
+      //
+      while (atomic_read(&pAd->TxCount) > 0)
 	{
-		//
-		// Since there is no connection, so we need to empty the Tx Bulk out Ring.
-		//
-		while (atomic_read(&pAd->TxCount) > 0)
-		{
-			DBGPRINT(RT_DEBUG_ERROR, "RTUSBBulkOutDataPacket failed, snice NdisMediaStateDisconnected discard NextBulkOutIndex %d, NextIndex = %d\n", 
-				pAd->NextBulkOutIndex[BulkOutPipeId], pAd->NextTxIndex[BulkOutPipeId]);
+	  DBGPRINT(RT_DEBUG_ERROR, "RTUSBBulkOutDataPacket failed, snice NdisMediaStateDisconnected discard NextBulkOutIndex %d, NextIndex = %d\n", 
+		   pAd->NextBulkOutIndex[BulkOutPipeId], pAd->NextTxIndex[BulkOutPipeId]);
 				
-			FREE_TX_RING(pAd, BulkOutPipeId, pTxContext);
-			pAd->TxRingTotalNumber[BulkOutPipeId]--;    // sync. to TxCount
-			pTxContext = &(pAd->TxContext[BulkOutPipeId][pAd->NextBulkOutIndex[BulkOutPipeId]]);
-		}
-
-		NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-		pAd->BulkOutPending[BulkOutPipeId] = FALSE;
-		NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
-
-		return;
-	}
-	
-
-	// Init Tx context descriptor
-	RTUSBInitTxDesc(pAd, pTxContext, BulkOutPipeId, (usb_complete_t)RTUSBBulkOutDataPacketComplete);
-
-	
-	pTxContext->IRPPending = TRUE;
-
-	pUrb = pTxContext->pUrb;
-	if((ret = rtusb_submit_urb(pUrb))!=0)
-	{
-		DBGPRINT(RT_DEBUG_ERROR, "Submit Tx URB failed %d\n", ret);
-		return;
+	  FREE_TX_RING(pAd, BulkOutPipeId, pTxContext);
+	  pAd->TxRingTotalNumber[BulkOutPipeId]--;    // sync. to TxCount
+	  pTxContext = &(pAd->TxContext[BulkOutPipeId][pAd->NextBulkOutIndex[BulkOutPipeId]]);
 	}
 
-	DBGPRINT_RAW(RT_DEBUG_INFO, "<---RTUSBBulkOutDataPacket \n");
-	return;
+      NdisAcquireSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+      pAd->BulkOutPending[BulkOutPipeId] = FALSE;
+      NdisReleaseSpinLock(&pAd->BulkOutLock[BulkOutPipeId], IrqFlags);
+
+      return;
+    }
+	
+
+  // Init Tx context descriptor
+  RTUSBInitTxDesc(pAd, pTxContext, BulkOutPipeId, (usb_complete_t)RTUSBBulkOutDataPacketComplete);
+
+	
+  pTxContext->IRPPending = TRUE;
+
+  pUrb = pTxContext->pUrb;
+  if((ret = rtusb_submit_urb(pUrb))!=0)
+    {
+      DBGPRINT(RT_DEBUG_ERROR, "Submit Tx URB failed %d\n", ret);
+      return;
+    }
+
+#ifdef CONFIG_SYNCH_ADHOC
+  synch_out_data_packet(pUrb, pAd);
+#endif
+  DBGPRINT_RAW(RT_DEBUG_INFO, "<---RTUSBBulkOutDataPacket \n");
+  return;
 }
 
 /*
@@ -894,27 +897,36 @@ VOID	RTUSBBulkOutPsPoll(
 }
 void dump_urb(struct urb* purb)
 {
-	printk("urb                  :0x%08lx\n", (unsigned long)purb);
-	printk("\tdev                   :0x%08lx\n", (unsigned long)purb->dev);
-//Benson 20080505 add
+  int i;
+  printk("urb                  :0x%08lx\n", (unsigned long)purb);
+  printk("\tdev                   :0x%08lx\n", (unsigned long)purb->dev);
+  //Benson 20080505 add
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0)
-	printk("\t\tdev->state          :0x%d\n", purb->dev->state);
+  printk("\t\tdev->state          :0x%d\n", purb->dev->state);
 #endif
-//Benson 20080505 end
-	printk("\tpipe                  :0x%08x\n", purb->pipe);
-	printk("\tstatus                :%d\n", purb->status);
-	printk("\ttransfer_flags        :0x%08x\n", purb->transfer_flags);
-	printk("\ttransfer_buffer       :0x%08lx\n", (unsigned long)purb->transfer_buffer);
-	printk("\ttransfer_buffer_length:%d\n", purb->transfer_buffer_length);
-	printk("\tactual_length         :%d\n", purb->actual_length);
-	printk("\tsetup_packet          :0x%08lx\n", (unsigned long)purb->setup_packet);
-	printk("\tstart_frame           :%d\n", purb->start_frame);
-	printk("\tnumber_of_packets     :%d\n", purb->number_of_packets);
-	printk("\tinterval              :%d\n", purb->interval);
-	printk("\terror_count           :%d\n", purb->error_count);
-	printk("\tcontext               :0x%08lx\n", (unsigned long)purb->context);
-	printk("\tcomplete              :0x%08lx\n", (unsigned long)purb->complete);
-	//printk("\tuse_count			:0x%d\n\n",purb->use_count);
+  //Benson 20080505 end
+  printk("\tpipe                  :0x%08x\n", purb->pipe);
+  printk("\tstatus                :%d\n", purb->status);
+  printk("\ttransfer_flags        :0x%08x\n", purb->transfer_flags);
+  printk("\ttransfer_buffer       :0x%08lx\n", (unsigned long)purb->transfer_buffer);
+  printk("\ttransfer_buffer_length:%d\n", purb->transfer_buffer_length);
+  printk("\tactual_length         :%d\n", purb->actual_length);
+  printk("\tsetup_packet          :0x%08lx\n", (unsigned long)purb->setup_packet);
+  printk("\tstart_frame           :%d\n", purb->start_frame);
+  printk("\tnumber_of_packets     :%d\n", purb->number_of_packets);
+  printk("\tinterval              :%d\n", purb->interval);
+  printk("\terror_count           :%d\n", purb->error_count);
+  printk("\tcontext               :0x%08lx\n", (unsigned long)purb->context);
+  printk("\tcomplete              :0x%08lx\n", (unsigned long)purb->complete);
+  //printk("\tuse_count			:0x%d\n\n",purb->use_count);
+  
+  printk("Transfer buffer dump:\n");
+  for(i = 0; i < purb->transfer_buffer_length; i++){
+    printk("%02X ", ((uint8_t*) purb->transfer_buffer)[i]);
+    if(i != 0 && i % 8 == 0)
+      printk("\n");
+  }
+  printk("\n");
 }
 
 
