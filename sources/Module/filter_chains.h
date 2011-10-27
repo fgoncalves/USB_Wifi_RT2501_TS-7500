@@ -24,6 +24,7 @@ uint8_t nfilters = 0;
 
 extern void register_filter(uint8_t proto, uint32_t dst_addr, uint32_t src_addr, uint16_t dst_port, uint16_t src_port);
 extern void unregister_filter(uint8_t index);
+extern uint8_t match_filter(struct iphdr* ip, filter* f);
 
 #endif
 
