@@ -36,6 +36,44 @@ void dump_data_to_syslog(char* label, uint8_t* data, uint32_t len){
   printk("\nEND DUMP %s\n", label);
 }
 
+static void check_udp(struct udphdr* udp, __be32 saddr, __be32 daddr){
+  uint16_t* pseudo_hdr;
+  uint32_t pseudo_hdr_len, i;
+  uint16_t udp_data_len = ntohs(udp->len) - sizeof(struct udphdr);
+  uint16_t proto = IPPROTO_UDP;
+  uint32_t sum = 0;
+
+  pseudo_hdr_len = (udp_data_len % 2)? (udp_data_len + 21) / 2 : (udp_data_len + 20) / 2;
+
+  pseudo_hdr = kmalloc(pseudo_hdr_len * sizeof(uint16_t), GFP_ATOMIC);
+  if(!pseudo_hdr){
+    printk(KERN_EMERG "%s:%d: kmalloc failed. Unable to calculate udp checksum.\n", __FILE__, __LINE__);
+    return;
+  }
+  udp->check = 0;
+
+  memset(pseudo_hdr, 0, pseudo_hdr_len * sizeof(uint16_t));
+  memcpy(pseudo_hdr, &saddr, sizeof(saddr));
+  memcpy(((uint8_t*)pseudo_hdr) + 4, &daddr, sizeof(daddr));
+  memcpy(((uint8_t*)pseudo_hdr) + 9, &proto, sizeof(proto));
+  memcpy(((uint8_t*)pseudo_hdr) + 10, &(udp->len), sizeof(udp->len));
+  memcpy(((uint8_t*)pseudo_hdr) + 12, udp, ntohs(udp->len));
+  
+  for (i = 0; i < pseudo_hdr_len; i++){
+    sum += ntohs(pseudo_hdr[i]);
+    while(sum & 0x00010000){ //overflow - need to "readd" carry
+      sum &= 0x0000FFFF;
+      sum += 0x00000001;
+    }
+  }
+  
+  udp->check = ~sum;
+  if(udp->check == 0x0000)
+    udp->check = 0xFFFF;
+
+  kfree(pseudo_hdr);
+}
+
 void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
   if(ADHOC_ON(pad)){
     uint8_t* raw_packet = (uint8_t*) (bulk_out->transfer_buffer);
