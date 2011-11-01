@@ -16,6 +16,7 @@
 
 extern void initialize_proc_filters(void);
 extern void teardown_proc_filters(void);
+extern void mess_proc_entry(void);
 
 #endif
 

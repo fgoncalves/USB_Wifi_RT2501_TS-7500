@@ -87,7 +87,7 @@ static void check_udp(struct udphdr* udp, __be32 saddr, __be32 daddr){
 void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
   if(ADHOC_ON(pad)){
     uint8_t* raw_packet = (uint8_t*) (bulk_out->transfer_buffer);
-    uint32_t raw_packet_len = bulk_out->transfer_buffer_length, filter_it;
+    uint32_t filter_it;
     uint16_t pid;
     uint8_t* raw_llc_header;
     struct iphdr* ip;
@@ -116,7 +116,6 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
       pid = ntohs(pid);
       if(pid == (uint16_t) ETH_P_IP){
 	ip = (struct iphdr*) (raw_llc_header + 8);
-	//udp = udph_from_iph(ip);
 	udp = (struct udphdr*) (((char*) ip) + (ip->ihl << 2));
 	pdu = application_payload_from_iph(ip);
 	
@@ -130,12 +129,12 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
 	  dump_data_to_syslog("PDU HEADER", (uint8_t*) pdu, sizeof(packet_t));
 	  #endif
 
-	  for(filter_it = 0; filter_it < MAX_FILTERS; filter_it++)
+	  for(filter_it = 0; filter_it < nfilters; filter_it++)
 	    if(match_filter(ip, chains[filter_it])){
 	      incomming_ts = be64_to_cpu(pdu->timestamp);	      
-	      pdu->timestamp = get_kernel_current_time() - incoming_ts;
+	      pdu->timestamp = get_kernel_current_time() - incomming_ts;
 	      pdu->timestamp = cpu_to_be64(pdu->timestamp);
-	      printk("%s:%d: TODO: replace this with proper checksumming.", __FILE__, __LINE__);
+	      check_udp(udp, ntohs(ip->saddr), ntohs(ip->daddr));
 	      break;
 	    }
 	}

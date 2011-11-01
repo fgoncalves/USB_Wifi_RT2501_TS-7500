@@ -6,6 +6,7 @@
 #include <linux/slab.h>
 #include <asm/uaccess.h>
 #include "proc_filters.h"
+#include "filter_chains.h"
 
 #define PROC_FILE_NAME "synch_filters"
 
@@ -30,7 +31,7 @@ static void realloc_proc_contents(void) {
   proc_contents.file_buffer = kmalloc(proc_contents.buffer_size << 1,
 				      GFP_ATOMIC);
   if (!proc_contents.file_buffer) {
-    printk("%s in %s:%d: kmalloc failed. Unnable to create proc entry.\n", __FILE__, __FUNCTION__, __LINE__);
+    printk("%s in %s:%d: kmalloc failed. Unnable to realloc proc entry.\n", __FILE__, __FUNCTION__, __LINE__);
     return;
   }
   proc_contents.buffer_size <<= 1;
@@ -39,18 +40,42 @@ static void realloc_proc_contents(void) {
   memset(proc_contents.file_buffer, 0, proc_contents.buffer_size);
 }
 
-//Append the given buffer to the proc entry cache.
+
+static void __append_to_buffer(char* dest, char* orig, uint32_t len, uint32_t dst_offset, uint32_t orig_offset){
+  memcpy(dest + dst_offset, orig + orig_offset, len);
+}
+
 static void append_to_buffer(char* buff_to_append, uint32_t len) {
-  memcpy(proc_contents.file_buffer + proc_contents.buffer_offset, buff_to_append, len);
+  __append_to_buffer(proc_contents.file_buffer, buff_to_append, len, proc_contents.buffer_offset, 0);
   proc_contents.buffer_offset += len;
 }
 
 static void fill_proc_contents(void){
-  //TODO: Fill buffer with contents from filters
-}
+  uint32_t i;
+  char buff[48];
+  
+  proc_contents.buffer_offset = 0;
+  memset(proc_contents.file_buffer, 0, proc_contents.buffer_size);
+  append_to_buffer(" ID Src Address     Dst Address    SP   DP     \n", 48);
 
-static void parse_request(char* buff, unsigned long len){
-  //TODO: Register filters
+  for(i = 0; i < nfilters; i++){
+    memset(buff, 0, sizeof(buff));
+    sprintf(buff, "%d", i);
+    if(chains[i]->src_addr != 0)
+      sprintf(buff + 4, "%d.%d.%d.%d", NIPQUAD(chains[i]->src_addr));
+    if(chains[i]->dst_addr != 0)
+      sprintf(buff + 20, "%d.%d.%d.%d", NIPQUAD(chains[i]->dst_addr));
+    if(chains[i]->src_port != 0)
+      sprintf(buff + 36, "%d", ntohs(chains[i]->src_port));
+    if(chains[i]->dst_port != 0)
+      sprintf(buff + 42, "%d", ntohs(chains[i]->dst_port));
+    if(proc_contents.buffer_offset + sizeof(buff) >= proc_contents.buffer_size)
+      realloc_proc_contents();
+    append_to_buffer(buff, sizeof(buff));
+    append_to_buffer("\n", 1);
+  }
+  
+  proc_contents.dirty = 0;
 }
 
 static int procfile_read(char *buffer, char **buffer_location, off_t offset, int buffer_length, int *eof, void *data) {
@@ -73,19 +98,47 @@ static int procfile_read(char *buffer, char **buffer_location, off_t offset, int
   return how_many_can_we_cpy;
 }
 
-#define MAX_REGISTRY_LINE 1024
-
-/*
- *This proc entry accepts writing lines of the form 'PROTO;SRC_IP;DST_IP;SRC_PORT;DST_PORT' all in big endian format.
+/*Write format:
+ *Register filter:
+ * R:<filter>
+ *Unregister filter:
+ * U:id
  */
 static int procfile_write(struct file *file, const char *buffer, unsigned long count, void *data) {
-  char internal_buffer[MAX_REGISTRY_LINE] = { 0 };
+  char internal_buffer[2 + sizeof(filter)] = {0};
+  filter* f;
+  uint32_t i;
 
   if (copy_from_user(internal_buffer, buffer, count)) {
     return -EFAULT;
   }
 
-  parse_request(internal_buffer, count);
+  switch(internal_buffer[0]){
+  case 'R':
+    //Register filter
+    if(count - 2 != sizeof(filter)){
+      printk("Unable to create filter. User program did not write a filter structure to proc entry.\n");
+      return -EINVAL;
+    }
+    f = kmalloc(sizeof(filter), GFP_ATOMIC);
+    if(!f){
+      printk(KERN_EMERG "%s:%d: kmalloc failed.\n", __FILE__, __LINE__);
+      return 0;
+    }
+
+    memcpy(f, internal_buffer + 2, sizeof(filter));
+    register_filter(f);
+    break;
+  case 'U':
+    //unregister filter
+    memcpy(&i, internal_buffer + 2, sizeof(i));
+    if(i < 0 || i >= nfilters){
+      printk("Unable to delete filter %d\n", i);
+      return -EINVAL;
+    }
+    unregister_filter(i);
+    break;
+  }
   return count;
 }
 
@@ -93,7 +146,7 @@ static void create_proc_file(void) {
   proc_file_entry = create_proc_entry(PROC_FILE_NAME, 0644, NULL);
 
   if (proc_file_entry == NULL) {
-    printk (KERN_ALERT "Error: Could not initialize /proc/%s\n", PROC_FILE_NAME);
+    printk (KERN_EMERG "Error: Could not initialize /proc/%s\n", PROC_FILE_NAME);
     return;
   }
 
@@ -108,7 +161,7 @@ static void create_proc_file(void) {
   proc_contents.dirty = 1;
   proc_contents.file_buffer = kmalloc(1024, GFP_ATOMIC);
   if (!proc_contents.file_buffer) {
-    printk("%s in %s:%d: kmalloc failed. Unnable to create proc entry.\n",  __FILE__, __FUNCTION__, __LINE__);
+    printk(KERN_EMERG "%s in %s:%d: kmalloc failed. Unnable to create proc entry.\n",  __FILE__, __FUNCTION__, __LINE__);
     return;
   }
   memset(proc_contents.file_buffer, 0, 1024);
@@ -124,6 +177,7 @@ void mess_proc_entry(void) {
 
 void initialize_proc_filters(void){
   create_proc_file();
+  printk("Proc file %s initialized\n", PROC_FILE_NAME);
 }
 
 void teardown_proc_filters(void){

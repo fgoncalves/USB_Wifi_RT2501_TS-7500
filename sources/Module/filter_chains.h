@@ -2,12 +2,13 @@
  *@author: Frederico Gonçalves
  */
 
-#ifndef __SYNCH_PROTO_H__
-#define __SYNCH_PROTO_H__
+#ifndef __FILTER_CHAINS_H__
+#define __FILTER_CHAINS_H__
 
 #ifdef CONFIG_SYNCH_ADHOC
 
 #include <linux/kernel.h>
+#include <linux/ip.h>
 
 typedef struct{
   uint8_t proto;
@@ -19,13 +20,13 @@ typedef struct{
 
 #define MAX_FILTERS 256
 
-filter* chains[MAX_FILTERS] = {0};
-uint8_t nfilters = 0;
+extern filter* chains[MAX_FILTERS];
+extern uint8_t nfilters;
 
-extern void register_filter(uint8_t proto, uint32_t dst_addr, uint32_t src_addr, uint16_t dst_port, uint16_t src_port);
+extern void register_filter(filter* f);
 extern void unregister_filter(uint8_t index);
 extern uint8_t match_filter(struct iphdr* ip, filter* f);
-
+extern void clean_filters(void);
 #endif
 
 #endif

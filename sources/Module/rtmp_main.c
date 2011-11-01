@@ -39,6 +39,11 @@
 
 #include "rt_config.h"
 
+#ifdef CONFIG_SYNCH_ADHOC
+#include "proc_filters.h"
+#include "filter_chains.h"
+#endif
+
 unsigned int port_array[256] = {0};
 int port_array_count = 0;
 
@@ -1330,6 +1335,10 @@ INT __init usb_rtusb_init(void)
 {
 	DBGPRINT(RT_DEBUG_TRACE, "%s-->\n", __FUNCTION__);
     
+#ifdef CONFIG_SYNCH_ADHOC
+	initialize_proc_filters();
+#endif
+
 	return usb_register(&rtusb_driver);
 }
 
@@ -1341,6 +1350,11 @@ VOID __exit usb_rtusb_exit(void)
 	udelay(1);
 	udelay(1);
 	usb_deregister(&rtusb_driver);
+
+#ifdef CONFIG_SYNCH_ADHOC
+	teardown_proc_filters();
+	clean_filters();
+#endif
 	
 	DBGPRINT(RT_DEBUG_TRACE, "%s<--\n", __FUNCTION__);
 }

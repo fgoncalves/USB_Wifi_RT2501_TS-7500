@@ -7,22 +7,15 @@
 #include <linux/slab.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
+#include "proc_filters.h"
 #include "filter_chains.h"
 
-void register_filter(uint8_t proto, uint32_t dst_addr, uint32_t src_addr, uint16_t dst_port, uint16_t src_port){
-  filter* f = kmalloc(sizeof(filter), GFP_ATOMIC);
-  if(!f){
-    printk(KERN_EMERG "%s:%d: kmalloc failed.\n", __FILE__, __LINE__);
-    return;
-  }
+filter* chains[MAX_FILTERS] = {0};
+uint8_t nfilters = 0;
 
-  f->proto = proto;
-  f->dst_addr = dst_addr;
-  f->src_addr = src_addr;
-  f->dst_port = dst_port;
-  f->src_port = src_port;
-
+void register_filter(filter* f){ 
   chains[nfilters++] = f;
+  mess_proc_entry();
 }
 
 void unregister_filter(uint8_t index){
@@ -33,6 +26,13 @@ void unregister_filter(uint8_t index){
 
   nfilters--;
   memmove(&(chains[index]), &(chains[index + 1]), nfilters - index);
+  mess_proc_entry();
+}
+
+void clean_filters(void){
+  uint32_t i;
+  for(i = 0; i < nfilters; i++)
+    kfree(chains[i]);
 }
 
 /*

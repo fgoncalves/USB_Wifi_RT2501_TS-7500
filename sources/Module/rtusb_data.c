@@ -186,93 +186,6 @@ NDIS_STATUS Sniff2BytesFromNdisBuffer( IN struct sk_buff *pFirstSkb,
 	return NDIS_STATUS_SUCCESS;
 }
 
-__be16 udp_checksum(struct iphdr* iphdr, struct udphdr* udphdr,
-		unsigned char* data) {
-	__be32 sum = 0;
-	__be16 proto = 0x1100; //17 udp
-	__be16 data_length = (__be16) ntohs(udphdr->len) - sizeof(struct udphdr);
-	__be16 src[2];
-	__be16 dest[2];
-	__be16 *padded_data;
-	int padded_data_length, i;
-
-	if(data_length % 2 != 0)
-	padded_data_length = (int) data_length / 2 + 1;
-	else
-	padded_data_length = (int) data_length / 2;
-
-	padded_data = kmalloc(padded_data_length * sizeof(__be16), GFP_ATOMIC);
-
-	if(!padded_data) {
-		printk("%s %s:%u: kmalloc failed to allocate space for padded data in udp checksum. As a result checksum is not calculated.\n", __FILE__, __FUNCTION__, __LINE__);
-    return 0;
-  }
-
-  padded_data[padded_data_length - 1] = 0;
-  memcpy(padded_data,data, data_length);
-
-  src[0] = (__be16) (iphdr->saddr >> 16);
-  src[1] = (__be16) (iphdr->saddr);
-  dest[0] = (__be16) (iphdr->daddr >> 16);
-  dest[1] = (__be16) (iphdr->daddr);
-
-  data_length = (__be16) htons(data_length);
-
-
-  sum = src[0] + src[1] + dest[0] + dest[1] + proto + udphdr->len + udphdr->source + udphdr->dest + udphdr->len;
-  
-  for(i = 0; i < padded_data_length; i++)
-    sum += padded_data[i];
- 
-  while(sum >> 16)
-    sum = (__be16) (sum & 0xFFFF) + (__be16) (sum >> 16);
-
-  kfree(padded_data);
-  
-  return (__be16) ~sum;
-}
-
-int64_t swap_64bit_word_byte_order(int64_t time) {
-	unsigned char* bytes = (unsigned char*) &time;
-	uint32_t word;
-
-	memcpy(&word, bytes, sizeof(uint32_t));
-	word = htonl(word);
-	memcpy(bytes, &word, sizeof(uint32_t));
-
-	memcpy(&word, bytes + sizeof(uint32_t), sizeof(uint32_t));
-	word = htonl(word);
-	memcpy(bytes + sizeof(uint32_t), &word, sizeof(uint32_t));
-
-	return *((int64_t *) bytes);
-}
-
-uint8_t check_port(uint16_t port){
-	uint8_t i;
-	for(i = 0; i < port_array_count; i++)
-		if(port_array[i] == port){
-			printk(KERN_EMERG "This port is in port array.\n");
-			return 1;
-		}
-	return 0;
-}
-
-//micros
-#define __DELTA__ 645
-/*
-Return an estimation of the usb communication delay plus some other errors.....
-
-parameters:
-
-	packet_size : Packet's size in units of bytes
-
-Return value is in microseconds.
-*/
-uint64_t usbCalcDuration(uint32_t packet_size){
-	return packet_size * 16 / 12 + __DELTA__;
-}
-
-
 /*
  ========================================================================
 
@@ -300,17 +213,17 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 	PQUEUE_HEADER pTxQueue;
 	UCHAR PsMode;
 	unsigned long IrqFlags;
-	static ULONG OldFailLowValue = 0, OldFailHighValue = 0, OldRetryLowValue =
+	/*	static ULONG OldFailLowValue = 0, OldFailHighValue = 0, OldRetryLowValue =
 	  0, OldRetryHighValue = 0;
-	static ULONG fails = 0, retries = 0;
+	  static ULONG fails = 0, retries = 0;*/
 
 	/*Fred's stuff*/
-	struct iphdr* iph;
+	/*	struct iphdr* iph;
 	struct udphdr* udph = NULL;
 	uint8_t store_duration = 0;
 	static uint8_t last_packet_was_important = 0;
 	uint64_t total_time = 0, usb = 0;
-	__tp(pdu) *pkt = NULL;
+	__tp(pdu) *pkt = NULL;*/
 	/*
 	 * 802.11g:
 	 * SIFS = 10 us
@@ -321,9 +234,9 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 	 * DIFS + TIME TO SEND DATA
 	 */
 
-	uint8_t DIFS = 50 /* us */;
-	/*==========*/ULONG retry_dif1 = 0, retry_dif2 = 0, fail_dif1 = 0,
-			fail_dif2 = 0;
+	/*uint8_t DIFS = 50;
+	  ULONG retry_dif1 = 0, retry_dif2 = 0, fail_dif1 = 0,
+	  fail_dif2 = 0;*/
 
 	DBGPRINT(RT_DEBUG_INFO, "====> RTMPSendPacket\n");
 
@@ -384,7 +297,7 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 	RTMP_SET_PACKET_RTS(pSkb, RTSRequired);
 	RTMP_SET_PACKET_TXRATE(pSkb, pAd->PortCfg.TxRate);
 	
-	iph = ip_hdr(pSkb);
+	/*	iph = ip_hdr(pSkb);
 	if (iph->protocol == IPPROTO_UDP) {
 		udph = (struct udphdr*) (((char*) iph) + (iph->ihl << 2));
 		//if (check_port(ntohs(udph->dest))) //I don't like to make this hardcoded, but for now it'll have to do.
@@ -398,12 +311,6 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 		retry_dif1 = pAd->WlanCounters.RetryCount.vv.HighPart
 				- OldRetryHighValue;
 		retry_dif2 = pAd->WlanCounters.RetryCount.vv.LowPart - OldRetryLowValue;
-		//This code is buggy. dif1 and dif2 are ULONG which should have 4 bytes not 8 as I thought.
-		/*      if ( ((int64_t) dif2) < 0 )
-		 {
-		 dif1 -= 1;
-		 dif2 = 0xFFFFFFFFFFFFFFFF + (int64_t) dif2;
-		 }*/
 	}
 
 	OldRetryLowValue = pAd->WlanCounters.RetryCount.vv.LowPart;
@@ -415,11 +322,6 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 				- OldFailHighValue;
 		fail_dif2 = pAd->WlanCounters.FailedCount.vv.LowPart - OldFailLowValue;
 		//This code is buggy. dif1 and dif2 are ULONG which should have 4 bytes not 8 as I thought.
-		/*      if ( ((int64_t) dif2) < 0 )
-		 {
-		 dif1 -= 1;
-		 dif2 = 0xFFFFFFFFFFFFFFFF + (int64_t) dif2;
-		 }*/
 	}
 
 	OldFailLowValue = pAd->WlanCounters.FailedCount.vv.LowPart;
@@ -428,11 +330,11 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 	if(last_packet_was_important){
 	  fails = fail_dif2;
 	  retries = retry_dif2;
-	}
+	  }*/
 
 	//=====================================================================================
 	/*This is how I store values in an application payload*/
-	if (store_duration) { //Store duration in packet
+	/*if (store_duration) { //Store duration in packet
 		total_time = DIFS + RTMPCalcDuration(
 				pAd, RTMP_GET_PACKET_TXRATE (pSkb), pSkb->len); // DIFS + Data
 
@@ -464,7 +366,7 @@ uint64_t usbCalcDuration(uint32_t packet_size){
 
 		last_packet_was_important = 1;
 	}else
-	  last_packet_was_important = 0;
+	last_packet_was_important = 0;*/
 	//===================================================
 
 	//
