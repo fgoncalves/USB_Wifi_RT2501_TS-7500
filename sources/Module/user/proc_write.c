@@ -16,7 +16,7 @@ typedef struct{
   uint16_t src_port;
 }filter;
 
-char* proc_entry_name = "synch_filters";
+char* proc_entry_name = "/proc/synch_filters";
 //-----------------
 
 void write_to_proc_entry(char cmd, uint32_t daddr, uint32_t saddr, uint16_t dport, uint16_t sport, uint8_t index){
@@ -52,12 +52,12 @@ void write_to_proc_entry(char cmd, uint32_t daddr, uint32_t saddr, uint16_t dpor
     break;
   }
   case 'U':{
-    char buff[6] = {0};
+    char buff[3] = {0};
     int fd, status;
-    buff[0] = 'R';
+    buff[0] = 'U';
     buff[2] = ':';
 
-    sprintf(buff + 2, "%d", index);
+    memcpy(buff + 2, &index, sizeof(index));
     
     fd = open(proc_entry_name, O_WRONLY);
     if(fd == -1){

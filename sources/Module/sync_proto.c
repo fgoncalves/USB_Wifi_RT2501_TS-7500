@@ -101,7 +101,9 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
     //Check if logical link control header will have 8 bytes
     raw_llc_header = (uint8_t*) (((uint8_t*) _80211) + sizeof(HEADER_802_11));
 
+    #ifdef DBG
     dump_data_to_syslog("LLC HEADER", raw_llc_header, 8);
+    #endif
 
     if(raw_llc_header[0] == (uint8_t) SNAP
        &&
@@ -131,6 +133,7 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
 
 	  for(filter_it = 0; filter_it < nfilters; filter_it++)
 	    if(match_filter(ip, chains[filter_it])){
+	      printk("Applying synchronization.\n");
 	      incomming_ts = be64_to_cpu(pdu->timestamp);	      
 	      pdu->timestamp = get_kernel_current_time() - incomming_ts;
 	      pdu->timestamp = cpu_to_be64(pdu->timestamp);

@@ -39,22 +39,22 @@ void clean_filters(void){
  * Try to match registered filters against an udp packet
  */
 static uint8_t match_filter_against_udp_ports(struct udphdr* udp, filter* f){
-  if(f->dst_port != 0 && udp->dest == f->dst_port)
-    return 1;
-  if(f->src_port != 0 && udp->source == f->src_port)
-    return 1;
-  return 0;
+  if(f->dst_port != 0 && udp->dest != f->dst_port)
+    return 0;
+  if(f->src_port != 0 && udp->source != f->src_port)
+    return 0;
+  return 1;
 }
 
 /*
  * Try to match registered filters against an ip packet
  */
 static uint8_t match_filter_against_ip_ips(struct iphdr* ip, filter* f){
-  if(f->dst_addr != 0 && ip->daddr == f->dst_addr)
-    return 1;
-  if(f->src_addr != 0 && ip->saddr == f->src_addr)
-    return 1;
-  return 0;
+  if(f->dst_addr != 0 && ip->daddr != f->dst_addr)
+    return 0;
+  if(f->src_addr != 0 && ip->saddr != f->src_addr)
+    return 0;
+  return 1;
 }
 
 /*
