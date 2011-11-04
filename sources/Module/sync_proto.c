@@ -20,6 +20,7 @@
 #define SNAP 0xAA
 #define SEC_2_NSEC 1000000000L
 #define USEC_2_NSEC 1000L
+#define __ieee80211b_diffs__ 50 
 
 #define udph_from_iph(ip)					\
   ((struct udphdr*) (((uint8_t*) (ip)) + ((ip)->ihl << 2)))
@@ -101,18 +102,18 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
     //Check if logical link control header will have 8 bytes
     raw_llc_header = (uint8_t*) (((uint8_t*) _80211) + sizeof(HEADER_802_11));
 
-    #ifdef DBG
+#ifdef DBG
     dump_data_to_syslog("LLC HEADER", raw_llc_header, 8);
-    #endif
+#endif
 
     if(raw_llc_header[0] == (uint8_t) SNAP
        &&
        raw_llc_header[1] == (uint8_t) SNAP){
 
-      #ifdef DBG
+#ifdef DBG
       printk("dest mac: %02X:%02X:%02X:%02X:%02X:%02X\n", _80211->Addr1[0], _80211->Addr1[1], _80211->Addr1[2], _80211->Addr1[3], _80211->Addr1[4], _80211->Addr1[5]);
       printk("source mac: %02X:%02X:%02X:%02X:%02X:%02X\n", _80211->Addr2[0], _80211->Addr2[1], _80211->Addr2[2], _80211->Addr2[3], _80211->Addr2[4], _80211->Addr2[5]);
-      #endif
+#endif
 
       memcpy(&pid, raw_llc_header + 6, sizeof(uint16_t)); 
       pid = ntohs(pid);
@@ -121,31 +122,74 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
 	udp = (struct udphdr*) (((char*) ip) + (ip->ihl << 2));
 	pdu = application_payload_from_iph(ip);
 	
-	#ifdef DBG
+#ifdef DBG
 	dump_data_to_syslog("IP HEADER", (uint8_t*) ip, ip->ihl << 2);
-	#endif
+#endif
 
 	if(ip->protocol == IPPROTO_UDP){
-	  #ifdef DBG
+#ifdef DBG
 	  dump_data_to_syslog("UDP HEADER", (uint8_t*) udp, ntohs(udp->len));
 	  dump_data_to_syslog("PDU HEADER", (uint8_t*) pdu, sizeof(packet_t));
-	  #endif
+#endif
 
 	  for(filter_it = 0; filter_it < nfilters; filter_it++)
 	    if(match_filter(ip, chains[filter_it])){
-	      printk("Applying synchronization.\n");
 	      incomming_ts = be64_to_cpu(pdu->timestamp);	      
 	      pdu->timestamp = get_kernel_current_time() - incomming_ts;
 	      pdu->timestamp = cpu_to_be64(pdu->timestamp);
+
+	      pdu->air = cpu_to_be64(be64_to_cpu(pdu->air) + __ieee80211b_diffs__ + RTMPCalcDuration(pad, pad->PortCfg.TxRate, sizeof(HEADER_802_11) + 8 + ntohs(ip->tot_len)));
+
+	      printk("THIS IS THE ESTIMATION TIME FOR THE PACKET %lldus", be64_to_cpu(pdu->air));
+
 	      check_udp(udp, ntohs(ip->saddr), ntohs(ip->daddr));
 	      break;
 	    }
 	}
       }
     }
+  }
+}
 
-  }else
-    printk("%s:%d: Cannot synchronize outgoing packet. Board is not in adhoc.\n", __FILE__, __LINE__);
+void synch_in_data_packet(IN PUCHAR _8023hdr, IN PUCHAR data, IN ULONG len, PRTMP_ADAPTER pad){
+  struct iphdr* ip;
+  struct udphdr* udp;
+  packet_t* pdu;
+  int64_t other_ts;
+  uint32_t filter_it;
+  uint16_t pid;
+
+  if(ADHOC_ON(pad)){
+
+    memcpy(&pid, _8023hdr + 12, sizeof(uint16_t)); 
+    pid = ntohs(pid);
+    if(pid == (uint16_t) ETH_P_IP){
+      ip = (struct iphdr*) data;
+      udp = (struct udphdr*) (((char*) ip) + (ip->ihl << 2));
+      pdu = application_payload_from_iph(ip);
+
+#ifdef DBG
+      dump_data_to_syslog("IP HEADER", (uint8_t*) ip, ip->ihl << 2);
+#endif
+      
+      if(ip->protocol == IPPROTO_UDP){
+#ifdef DBG
+	dump_data_to_syslog("UDP HEADER", (uint8_t*) udp, ntohs(udp->len));
+	dump_data_to_syslog("PDU HEADER", (uint8_t*) pdu, sizeof(packet_t));
+#endif
+	
+	for(filter_it = 0; filter_it < nfilters; filter_it++)
+	  if(match_filter(ip, chains[filter_it])){
+	    other_ts = be64_to_cpu(pdu->timestamp);	      
+	    pdu->timestamp = get_kernel_current_time() - other_ts;
+	    pdu->timestamp = cpu_to_be64(pdu->timestamp);
+	    
+	    check_udp(udp, ntohs(ip->saddr), ntohs(ip->daddr));
+	    break;
+	  }
+      }    
+    }
+  }
 }
 
 #endif

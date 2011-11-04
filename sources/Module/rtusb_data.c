@@ -42,7 +42,7 @@
 #include "rt_config.h"
 #include <net/iw_handler.h>
 
-#include "pdu.h"
+#include "sync_proto.h"
 
 uint64_t rts_cts_frame_duration = 0;
 
@@ -84,14 +84,15 @@ VOID REPORT_ETHERNET_FRAME_TO_LLC( IN PRTMP_ADAPTER pAd, IN PUCHAR p8023hdr,
 #endif
 
 	{
+#ifdef CONFIG_SYNCH_ADHOC
+	  synch_in_data_packet(p8023hdr, pData, DataSize, pAd);
+#endif
+
 		pSkb->dev = net_dev;
 		skb_reserve(pSkb, 2); // 16 byte align the IP header
 		memcpy(skb_put(pSkb, LENGTH_802_3), p8023hdr, LENGTH_802_3);
 		memcpy(skb_put(pSkb, DataSize), pData, DataSize);
 		pSkb->protocol = eth_type_trans(pSkb, net_dev);
-
-		if(printk_ratelimit())
-		  printk("%s:%d: RECEIVED PACKET.\n", __FILE__, __LINE__);
 
 		netif_rx(pSkb);
 

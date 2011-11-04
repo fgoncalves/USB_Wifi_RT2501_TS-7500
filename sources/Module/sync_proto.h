@@ -13,6 +13,7 @@
 #include "rtmp.h" /*PRTMP_ADAPTER*/
 
 extern void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad);
+extern void synch_in_data_packet(IN PUCHAR _8023hdr, IN PUCHAR data, IN ULONG len, PRTMP_ADAPTER pad);
 #endif
 
 #endif
