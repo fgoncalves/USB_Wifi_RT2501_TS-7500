@@ -1154,13 +1154,11 @@ int rt_ioctl_siwessid(struct net_device *dev,
       NdisMoveMemory(Ssid.Ssid, essid, data->length);
       Ssid.SsidLength = data->length;
 #endif
-      printk("%s:%d: SETTING ESSID because data->flags are not 0.\n", __FILE__, __LINE__);
     }
   else
     {
       Ssid.SsidLength = 0;  // ANY ssid 
       NdisMoveMemory(Ssid.Ssid, "", 0);
-      printk("%s:%d: SETTING ESSID to any because data->flags are 0.\n", __FILE__, __LINE__);
     }
 
 #ifdef NATIVE_WPA_SUPPLICANT_SUPPORT
@@ -3675,8 +3673,6 @@ INT rt73_ioctl(
 
 	if (pAd->RTUSBCmdThr_pid < 0)
 		return -ENETDOWN;
-
-	printk("DOING IOCTL with value %d\n", cmd);
 
 	switch(cmd)
 	{			
