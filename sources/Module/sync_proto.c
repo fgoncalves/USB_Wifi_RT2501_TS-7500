@@ -96,6 +96,9 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
     packet_t* pdu;
     int64_t incomming_ts;
 
+    //I'll just keep track of the low part for now.
+    static uint32_t last_fails = 0, last_retries = 0;
+
     //jump ralink's control data
     HEADER_802_11* _80211 = (HEADER_802_11*) (raw_packet + sizeof(TXD_STRUC)); 
 
@@ -141,6 +144,15 @@ void synch_out_data_packet(struct urb* bulk_out, PRTMP_ADAPTER pad){
 	      pdu->air = cpu_to_be64(be64_to_cpu(pdu->air) + __ieee80211b_diffs__ + RTMPCalcDuration(pad, pad->PortCfg.TxRate, sizeof(HEADER_802_11) + 8 + ntohs(ip->tot_len)));
 
 	      printk("THIS IS THE ESTIMATION TIME FOR THE PACKET %lldus", be64_to_cpu(pdu->air));
+	      
+	      if(last_fails != pad->WlanCounters.FailedCount.vv.LowPart){
+		pdu->fails = last_fails -  pad->WlanCounters.FailedCount.vv.LowPart;
+		last_fails = pad->WlanCounters.FailedCount.vv.LowPart;
+	      }
+	      if(last_retries != pad->WlanCounters.RetryCount.vv.LowPart){
+		pdu->retries = last_retries -  pad->WlanCounters.RetryCount.vv.LowPart;
+		last_retries = pad->WlanCounters.RetryCount.vv.LowPart;
+	      }
 
 	      check_udp(udp, ntohs(ip->saddr), ntohs(ip->daddr));
 	      break;
